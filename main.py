@@ -3,7 +3,7 @@ import os
 
 import pygame as p
 
-from chess_engine import GameState
+import chess_engine
 from settings import *
 
 
@@ -55,13 +55,34 @@ def main():
     screen = p.display.set_mode((WIDTH, HEIGHT))
     clock = p.time.Clock()
     screen.fill(p.Color("white"))
-    gs = GameState()
+    gs = chess_engine.GameState()
     load_images()
     running = True
+    square_selected = ()  # keeps track of last click
+    player_clicks = []  # keeps track of players clicks
     while running:
         for e in p.event.get():
             if e.type == p.QUIT:
                 running = False
+            elif e.type == p.MOUSEBUTTONDOWN:
+                # (x, y) location of mouse
+                location = p.mouse.get_pos()
+                col = location[0] // SQ_SIZE
+                row = location[1] // SQ_SIZE
+                if square_selected == (row, col):
+                    # user clicked square twice
+                    square_selected, player_clicks = (), []
+                else:
+                    square_selected = (row, col)
+                    player_clicks.append(square_selected)
+
+                if len(player_clicks) == 2:
+                    move = chess_engine.Move(player_clicks[0], player_clicks[1], gs.board)
+                    print(move.get_chess_notation())
+                    gs.make_move(move)
+                    square_selected = ()
+                    player_clicks = []
+
         draw_game_state(screen, gs)
         clock.tick(MAX_FPS)
         p.display.flip()
