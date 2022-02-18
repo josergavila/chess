@@ -60,11 +60,35 @@ class GameState:
 
         return moves
 
+    # ==============================================================
+    # private helper methods
+    # ==============================================================
+
     def _is_white_turn(self, turn):
         return turn == "w" and self.white_to_move
 
     def _is_black_turn(self, turn):
         return turn == "b" and not self.white_to_move
+
+    def _get_enemy_color(self):
+        return "b" if self.white_to_move else "w"
+
+    def _get_color_direction(self):
+        return -1 if self.white_to_move else 1
+
+    @staticmethod
+    def _is_on_board(row, col):
+        return (0 <= row < 8) and (0 <= col < 8)
+
+    def _append_move(self, start_square, end_square, moves):
+        moves.append(self._instantiate_move(start_square, end_square))
+
+    def _instantiate_move(self, start_square, end_square):
+        return Move(start_square, end_square, self.board)
+
+    # ==============================================================
+    # piece move methods
+    # ==============================================================
 
     def _get_pawn_moves(self, row, col, moves):
         """helper function to get all pawn moves"""
@@ -82,33 +106,48 @@ class GameState:
             if (
                 row == base_row and self.board[first_move_row_direction][col] == "--"
             ):  # 2-sq advance
-                moves.append(
-                    Move((row, col), (first_move_row_direction, col), self.board)
-                )
+                self._append_move((row, col), (first_move_row_direction, col), moves)
 
         return moves
 
     def _check_pawn_left_capture(self, row, col, moves):
         """helper function to check pawn's left diagonal moves"""
-        row_direction, color = (row - 1, "b") if self.white_to_move else (row + 1, "w")
-        if (col - 1) >= 0:  # captures to left
-            if self.board[row_direction][col - 1][0] == color:
-                moves.append(Move((row, col), (row_direction, col - 1), self.board))
+        enemy_color = self._get_enemy_color()
+        row_direction = row + self._get_color_direction()
+        if (col - 1) >= 0:  # safety check
+            if self.board[row_direction][col - 1][0] == enemy_color:
+                self._append_move((row, col), (row_direction, col - 1), moves)
 
         return moves
 
     def _check_pawn_right_capture(self, row, col, moves):
         """helper function to check pawn's right diagonal moves"""
-        row_direction, color = (row - 1, "b") if self.white_to_move else (row + 1, "w")
-        if (col + 1) <= 7:  # captures to right
-            if self.board[row_direction][col + 1][0] == color:
-                moves.append(Move((row, col), (row_direction, col + 1), self.board))
+        enemy_color = self._get_enemy_color()
+        row_direction = row + self._get_color_direction()
+        if (col + 1) <= 7:  # safety check
+            if self.board[row_direction][col + 1][0] == enemy_color:
+                self._append_move((row, col), (row_direction, col + 1), moves)
 
         return moves
 
     def _get_rook_moves(self, row, col, moves):
         """helper function to get all rook moves"""
-        pass
+        directions = ((-1, 0), (0, -1), (1, 0), (0, 1))
+        enemy_color = self._get_enemy_color()
+        for direction in directions:
+            for i in range(1, 8):
+                end_row = row + direction[0] * i
+                end_col = col + direction[1] * i
+                if self._is_on_board(end_row, end_col):  # square is on board
+                    end_piece = self.board[end_row][end_col]
+                    if end_piece == "--" or end_piece[0] == enemy_color:
+                        self._append_move((row, col), (end_row, end_col), moves)
+                        if end_piece[0] == enemy_color:
+                            break  # cannot move beyond another piece
+                    else:
+                        break  # same color piece
+                else:
+                    break  # square is off board
 
     def _get_knight_moves(self, row, col, moves):
         """helper function to get all knight moves"""
@@ -116,7 +155,22 @@ class GameState:
 
     def _get_bishop_moves(self, row, col, moves):
         """helper function to get all bishop moves"""
-        pass
+        directions = ((-1, -1), (-1, 1), (1, -1), (1, 1))
+        enemy_color = self._get_enemy_color()
+        for direction in directions:
+            for i in range(1, 8):
+                end_row = row + direction[0] * i
+                end_col = col + direction[1] * i
+                if self._is_on_board(end_row, end_col):  # square is on board
+                    end_piece = self.board[end_row][end_col]
+                    if end_piece == "--" or end_piece[0] == enemy_color:
+                        self._append_move((row, col), (end_row, end_col), moves)
+                        if end_piece[0] == enemy_color:
+                            break  # cannot move beyond another piece
+                    else:
+                        break  # same color piece
+                else:
+                    break  # square is off board
 
     def _get_queen_moves(self, row, col, moves):
         """helper function to get all queen moves"""
