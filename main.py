@@ -87,8 +87,10 @@ def main():
                     if move in validMoves:
                         game_state.make_move(move)
                         move_made = True
-                    square_selected = ()
-                    player_clicks = []
+                        square_selected = ()
+                        player_clicks = []
+                    else:
+                        player_clicks = [square_selected]
 
             elif e.type == pg.KEYDOWN:
                 if e.key == pg.K_z:  # undo move
