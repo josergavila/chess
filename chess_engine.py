@@ -2,6 +2,21 @@
 
 
 class GameState:
+
+    rook_directions = ((-1, 0), (0, -1), (1, 0), (0, 1))  # vertical moves
+    bishop_directions = ((-1, -1), (-1, 1), (1, -1), (1, 1))  # diagonal moves
+    knight_moves = (
+        (-2, -1),
+        (-2, 1),
+        (-1, -2),
+        (-1, 2),
+        (1, -2),
+        (1, 2),
+        (2, -1),
+        (2, 1),
+    )
+    king_moves = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+
     def __init__(self):
         # more efficient implementation would be with numpy
         # board is a 8x8 2d list
@@ -80,6 +95,9 @@ class GameState:
     def _is_on_board(row, col):
         return (0 <= row < 8) and (0 <= col < 8)
 
+    def _get_player_color(self):
+        return "w" if self.white_to_move else "b"
+
     def _append_move(self, start_square, end_square, moves):
         moves.append(self._instantiate_move(start_square, end_square))
 
@@ -132,9 +150,9 @@ class GameState:
 
     def _get_rook_moves(self, row, col, moves):
         """helper function to get all rook moves"""
-        directions = ((-1, 0), (0, -1), (1, 0), (0, 1))
         enemy_color = self._get_enemy_color()
-        for direction in directions:
+        for direction in self.rook_directions:
+            # for direction in directions:
             for i in range(1, 8):
                 end_row = row + direction[0] * i
                 end_col = col + direction[1] * i
@@ -151,13 +169,18 @@ class GameState:
 
     def _get_knight_moves(self, row, col, moves):
         """helper function to get all knight moves"""
-        pass
+        for move in self.knight_moves:
+            end_row = row + move[0]
+            end_col = col + move[1]
+            if self._is_on_board(end_row, end_col):
+                end_piece = self.board[end_row][end_col]
+                if end_piece[0] != self._get_player_color():
+                    self._append_move((row, col), (end_row, end_col), moves)
 
     def _get_bishop_moves(self, row, col, moves):
         """helper function to get all bishop moves"""
-        directions = ((-1, -1), (-1, 1), (1, -1), (1, 1))
         enemy_color = self._get_enemy_color()
-        for direction in directions:
+        for direction in self.bishop_directions:
             for i in range(1, 8):
                 end_row = row + direction[0] * i
                 end_col = col + direction[1] * i
@@ -174,11 +197,18 @@ class GameState:
 
     def _get_queen_moves(self, row, col, moves):
         """helper function to get all queen moves"""
-        pass
+        self._get_rook_moves(row, col, moves)
+        self._get_bishop_moves(row, col, moves)
 
     def _get_king_moves(self, row, col, moves):
         """helper function to get all king moves"""
-        pass
+        for row_move, col_move in self.king_moves:
+            end_row = row + row_move
+            end_col = col + col_move
+            if self._is_on_board(end_row, end_col):
+                end_piece = self.board[end_row][end_col]
+                if end_piece[0] != self._get_player_color():
+                    self._append_move((row, col), (end_row, end_col), moves)
 
 
 class Move:
