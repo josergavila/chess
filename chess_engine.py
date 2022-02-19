@@ -16,6 +16,7 @@ class GameState:
         (2, 1),
     )
     king_moves = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+    directions = ((-1, 0), (0, -1), (1, 0), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1))
 
     def __init__(self):
         # more efficient implementation would be with numpy arrays
@@ -91,6 +92,59 @@ class GameState:
 
         return moves
 
+    def check_for_pins_and_checks(self):
+        pins, checks, in_check = [], [], False
+        enemy_color = self._get_enemy_color()
+        player_color = self._get_player_color()
+        start_row, start_col = self._get_king_location()
+
+        for direction in self.directions:
+            row_dir, col_dir = direction
+            possible_pin = ()
+            for i in range(1, 8):
+                end_row = start_row + row_dir * i
+                end_col = start_col + col_dir * i
+                if not self._is_on_board(end_row, end_col):  # off board
+                    break
+
+                end_piece = self.board[end_row][end_col]
+                if end_piece[0] == player_color:
+                    if possible_pin:  # pin - piece protecting king
+                        possible_pin = (end_row, end_col, row_dir, col_dir)
+                    else:
+                        break  # two pieces in direction - no pin
+                elif end_piece == enemy_color:
+                    piece_type = end_piece[1]
+                    if (
+                        self._is_rook(direction, piece_type)
+                        or self._is_bishop(direction, piece_type)
+                        or (
+                            self._is_pawn(i, piece_type)
+                            and self._is_there_pawn_threat(enemy_color, direction)
+                        )
+                        or self._is_king(i, piece_type)
+                    ):
+                        if possible_pin == ():
+                            in_check = True
+                            checks.append((end_row, end_col, row_dir, col_dir))
+                            break
+                        else:  # piece blocking -> pin
+                            pins.append(possible_pin)
+                            break
+
+        for row_dir, col_dir in self.knight_moves:  # check for knights
+            end_row = start_row + row_dir
+            end_col = start_col + col_dir
+            if not self._is_on_board(end_row, end_col):  # off board
+                break
+
+            end_piece = self.board[end_row][end_col]
+            if end_piece[0] == enemy_color and end_piece[1] == "N":
+                in_check = True
+                checks.append((end_row, end_col, row_dir, col_dir))
+
+        return in_check, pins, checks
+
     def get_all_possible_moves(self):
         moves = []
         for row in range(len(self.board)):
@@ -111,6 +165,27 @@ class GameState:
             self.white_king_location = (row, col)
         else:
             self.black_king_location = (row, col)
+
+    def _get_king_location(self):
+        if self.white_to_move:
+            return self.white_king_location
+        else:
+            return self.black_king_location
+
+    def _is_rook(self, direction, piece_type):
+        return direction in self.rook_directions and piece_type == "R"
+
+    def _is_bishop(self, direction, piece_type):
+        return direction in self.bishop_directions and piece_type == "B"
+
+    def _is_queen(self, piece_type):
+        return piece_type == "Q"
+
+    def _is_pawn(self, direction_range, piece_type):
+        return direction_range == 1 and piece_type == "p"
+
+    def _is_king(self, direction_range, piece_type):
+        return direction_range == 1 and piece_type == "K"
 
     def _is_in_check(self):
         if self.white_to_move:
@@ -145,21 +220,34 @@ class GameState:
     def _get_enemy_color(self):
         return "b" if self.white_to_move else "w"
 
-    def _get_color_direction(self):
-        return -1 if self.white_to_move else 1
-
-    @staticmethod
-    def _is_on_board(row, col):
-        return (0 <= row < 8) and (0 <= col < 8)
-
     def _get_player_color(self):
         return "w" if self.white_to_move else "b"
+
+    def _get_color_direction(self):
+        return -1 if self.white_to_move else 1
 
     def _append_move(self, start_square, end_square, moves):
         moves.append(self._instantiate_move(start_square, end_square))
 
     def _instantiate_move(self, start_square, end_square):
         return Move(start_square, end_square, self.board)
+
+    # ==============================================================
+    # static methods
+    # ==============================================================
+
+    @staticmethod
+    def _is_on_board(row, col):
+        return (0 <= row < 8) and (0 <= col < 8)
+
+    @staticmethod
+    def _is_there_pawn_threat(piece_color, piece_direction):
+        if piece_color == "w" and piece_direction in ((1, -1), (1, 1)):
+            return True
+        elif piece_color == "b" and piece_direction in ((-1, -1), (-1, 1)):
+            return True
+        else:
+            return False
 
     # ==============================================================
     # piece move methods
@@ -287,11 +375,17 @@ class Move:
             + self.end_col
         )
 
+    # ==============================================================
+    # magic methods
+    # ==============================================================
+
     def __eq__(self, other):
         """overriding equal method"""
         if isinstance(other, Move):
             return self.move_id == other.move_id
         return False
+
+    # ==============================================================
 
     def get_chess_notation(self):
         return self._get_rank_file(self.start_row, self.start_col) + self._get_rank_file(
