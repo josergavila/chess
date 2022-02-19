@@ -65,10 +65,10 @@ def main():
     square_selected = ()  # keeps track of last click
     player_clicks = []  # keeps track of players clicks
     while running:
-        for e in pg.event.get():
-            if e.type == pg.QUIT:
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
                 running = False
-            elif e.type == pg.MOUSEBUTTONDOWN:
+            elif event.type == pg.MOUSEBUTTONDOWN:
                 # (x, y) location of mouse
                 location = pg.mouse.get_pos()
                 col = location[0] // SQ_SIZE
@@ -92,8 +92,8 @@ def main():
                     else:
                         player_clicks = [square_selected]
 
-            elif e.type == pg.KEYDOWN:
-                if e.key == pg.K_z:  # undo move
+            elif event.type == pg.KEYDOWN:
+                if event.key == pg.K_z:  # undo move
                     game_state.undo_move()
                     move_made = True
 

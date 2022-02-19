@@ -18,7 +18,7 @@ class GameState:
     king_moves = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
 
     def __init__(self):
-        # more efficient implementation would be with numpy
+        # more efficient implementation would be with numpy arrays
         # board is a 8x8 2d list
         # first character represents color of piece
         # second character represents type of piece
@@ -44,12 +44,20 @@ class GameState:
         self.white_to_move = True
         self.move_log = []
 
+        # valid moves attributes
+        self.white_king_location = (7, 4)
+        self.black_king_location = (0, 4)
+        self.check_mate = False
+        self.stale_mate = False
+
     def make_move(self, move):
         """executes move (does not work for castling, pawn promotion and en-passant"""
         self.board[move.start_row][move.start_col] = "--"
         self.board[move.end_row][move.end_col] = move.piece_moved
         self.move_log.append(move)
         self.white_to_move = not self.white_to_move
+        if "K" in move.piece_moved:  # update king location
+            self._update_king_location(move.piece_moved[0], move.end_row, move.end_col)
 
     def undo_move(self):
         """undo last move"""
@@ -59,10 +67,29 @@ class GameState:
         self.board[move.start_row][move.start_col] = move.piece_moved
         self.board[move.end_row][move.end_col] = move.piece_captured
         self.white_to_move = not self.white_to_move
+        if "K" in move.piece_moved:
+            self._update_king_location(
+                move.piece_moved[0], move.start_row, move.start_col
+            )
 
     def get_valid_moves(self):
         """all moves considering checks/rules"""
-        return self.get_all_possible_moves()
+        # naive implementation ->  inefficient method
+        # 1) generate all possible moves and make move
+        # 2) generate opponent's moves
+        # 3) for each opponent's move, check if king is attacked
+        # 4) if king is attacked it's not a valid move
+        moves = self.get_all_possible_moves()
+        for move in moves[::-1]:
+            self.make_move(move)
+            self.white_to_move = not self.white_to_move  # make_move changes turn
+            if self._is_in_check():
+                moves.remove(move)
+            self.white_to_move = not self.white_to_move
+            self.undo_move()
+        self._is_check_mate(moves)
+
+        return moves
 
     def get_all_possible_moves(self):
         moves = []
@@ -78,6 +105,36 @@ class GameState:
     # ==============================================================
     # private helper methods
     # ==============================================================
+
+    def _update_king_location(self, piece_color, row, col):
+        if piece_color == "w":
+            self.white_king_location = (row, col)
+        else:
+            self.black_king_location = (row, col)
+
+    def _is_in_check(self):
+        if self.white_to_move:
+            return self._is_square_under_attack(self.white_king_location)
+        else:
+            return self._is_square_under_attack(self.black_king_location)
+
+    def _is_square_under_attack(self, square):
+        row, col = square
+        self.white_to_move = not self.white_to_move
+        opponent_moves = self.get_all_possible_moves()
+        self.white_to_move = not self.white_to_move
+        for move in opponent_moves:
+            if move.end_row == row and move.end_col == col:  # square is under attack
+                return True
+        return False
+
+    def _is_check_mate(self, moves):
+        self.check_mate, self.stale_mate = False, False
+        if not moves:
+            if self._is_in_check():
+                self.check_mate = True
+            else:
+                self.stale_mate = True
 
     def _is_white_turn(self, turn):
         return turn == "w" and self.white_to_move
