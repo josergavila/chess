@@ -74,6 +74,45 @@ class GameState:
             )
 
     def get_valid_moves(self):
+        moves = []
+        self.in_check, self.pins, self.checks = self.check_for_pins_and_checks()
+        king_row, king_col = self._get_king_location()
+
+        if self.in_check:
+            if len(self.checks) == 1:  # one check -> block it or move king
+                self.get_valid_moves_for_one_check(king_row, king_col, moves)
+            else:  # double check -> king has to move
+                self._get_king_moves(king_row, king_col, moves)
+        else:
+            moves = self.get_all_possible_moves()
+
+        return moves
+
+    def get_valid_moves_for_one_check(self, king_row, king_col, moves):
+        if len(self.checks) == 1:  # one check -> block it or move king
+            moves = self.get_all_possible_moves()
+            check_row, check_col, check_row_dir, check_col_dir = self.checks[0]
+            piece_checking = self._get_piece(check_row, check_col)
+            valid_squares = []
+            if piece_checking == "N":
+                valid_squares = [(check_row, check_col)]
+            else:
+                for i in range(1, 8):
+                    row_move, col_move = self._calc_squares_move(
+                        check_row_dir, check_col_dir, i
+                    )
+                    valid_square = (king_row + row_move, king_col + col_move)
+                    valid_squares.append(valid_square)
+                    if self._is_check_over(check_row, check_col, valid_square):
+                        break  # reached piece -> check if over
+            self.validate_possible_moves(valid_squares, moves)
+
+    def validate_possible_moves(self, valid_squares, moves):
+        for move in reversed(moves):
+            if move.piece_moved != "K":  # not king -> must block or capture
+                self.check_if_valid_move(move, valid_squares, moves)
+
+    def get_valid_moves_naive(self):
         """all moves considering checks/rules"""
         # naive implementation ->  inefficient method
         # 1) generate all possible moves and make move
@@ -108,12 +147,12 @@ class GameState:
                     break
 
                 end_piece = self.board[end_row][end_col]
-                if end_piece[0] == player_color:
-                    if possible_pin:  # pin - piece protecting king
+                if end_piece[0] == player_color and end_piece[1] != "K":
+                    if not possible_pin:  # pin - piece protecting king
                         possible_pin = (end_row, end_col, row_dir, col_dir)
                     else:
                         break  # two pieces in direction - no pin
-                elif end_piece == enemy_color:
+                elif end_piece[0] == enemy_color:
                     piece_type = end_piece[1]
                     if (
                         self._is_rook(direction, piece_type)
@@ -124,13 +163,15 @@ class GameState:
                         )
                         or self._is_king(i, piece_type)
                     ):
-                        if possible_pin == ():
+                        if not possible_pin:
                             in_check = True
                             checks.append((end_row, end_col, row_dir, col_dir))
                             break
                         else:  # piece blocking -> pin
                             pins.append(possible_pin)
                             break
+                    else:  # no possible checks
+                        break
 
         for row_dir, col_dir in self.knight_moves:  # check for knights
             end_row = start_row + row_dir
@@ -155,6 +196,155 @@ class GameState:
                     self.move_functions[piece](row, col, moves)
 
         return moves
+
+    # ==============================================================
+    # piece move methods
+    # ==============================================================
+
+    def _get_pawn_moves(self, row, col, moves):
+        """helper function to get all pawn moves"""
+        pin_info = self._check_for_pinned_pieces(row, col)
+        self._check_pawn_forward_move(row, col, moves, pin_info)
+        self._check_pawn_left_capture(row, col, moves, pin_info)
+        self._check_pawn_right_capture(row, col, moves, pin_info)
+
+    def _check_for_pinned_pieces(self, row, col, rook=False):
+        piece_pinned, pin_direction = False, ()
+        for pin in reversed(self.pins):
+            if self._is_piece_pin(row, col, pin):
+                piece_pinned = True
+                pin_direction = (pin[2], pin[3])
+                self.pins.remove(pin)
+                if rook and self.board[row][col][1] != "Q":
+                    # can't remove queen pin from, only bishop moves
+                    self.pins.remove(pin)
+                break
+
+        return piece_pinned, pin_direction
+
+    def _check_pawn_forward_move(self, row, col, moves, pin_info):
+        """helper function to check pawn's forward moves"""
+        piece_pinned, pin_direction = pin_info
+        row_adder = -1 if self.white_to_move else 1
+        row_direction, first_move_row_direction = row + row_adder, row + row_adder * 2
+        base_row = 6 if self.white_to_move else 1
+        if self.board[row_direction][col] == "--":  # 1 sq advance
+            if not piece_pinned or pin_direction == (row_direction, 0):
+                moves.append(Move((row, col), (row_direction, col), self.board))
+                if (
+                    row == base_row and self.board[first_move_row_direction][col] == "--"
+                ):  # 2-sq advance
+                    self._append_move((row, col), (first_move_row_direction, col), moves)
+
+        return moves
+
+    def _check_pawn_left_capture(self, row, col, moves, pin_info):
+        """helper function to check pawn's left diagonal moves"""
+        piece_pinned, pin_direction = pin_info
+        enemy_color = self._get_enemy_color()
+        row_direction = row + self._get_color_direction()
+        if (col - 1) >= 0:  # safety check
+            if self.board[row_direction][col - 1][0] == enemy_color:
+                if not piece_pinned or (pin_direction == (row_direction, -1)):
+                    breakpoint()
+                    self._append_move((row, col), (row_direction, col - 1), moves)
+
+        return moves
+
+    def _check_pawn_right_capture(self, row, col, moves, pin_info):
+        """helper function to check pawn's right diagonal moves"""
+        piece_pinned, pin_direction = pin_info
+        enemy_color = self._get_enemy_color()
+        row_direction = row + self._get_color_direction()
+        if (col + 1) <= 7:  # safety check
+            if self.board[row_direction][col + 1][0] == enemy_color:
+                if not piece_pinned or (pin_direction == (row_direction, 1)):
+                    self._append_move((row, col), (row_direction, col + 1), moves)
+
+        return moves
+
+    def _get_rook_moves(self, row, col, moves):
+        """helper function to get all rook moves"""
+        piece_pinned, pin_direction = self._check_for_pinned_pieces(row, col, rook=True)
+        enemy_color = self._get_enemy_color()
+        for direction in self.rook_directions:
+            for i in range(1, 8):
+                end_row = row + direction[0] * i
+                end_col = col + direction[1] * i
+                if self._is_on_board(end_row, end_col):
+                    if (
+                        not piece_pinned
+                        or (pin_direction == direction)
+                        or (pin_direction == (-direction[0], -direction[1]))
+                    ):
+                        end_piece = self.board[end_row][end_col]
+                        if end_piece == "--" or end_piece[0] == enemy_color:
+                            self._append_move((row, col), (end_row, end_col), moves)
+                            if end_piece[0] == enemy_color:
+                                break  # cannot move beyond another piece
+                        else:
+                            break  # same color piece
+                else:
+                    break  # square is off board
+
+    def _get_knight_moves(self, row, col, moves):
+        """helper function to get all knight moves"""
+        piece_pinned, _ = self._check_for_pinned_pieces(row, col)
+        for move in self.knight_moves:
+            end_row = row + move[0]
+            end_col = col + move[1]
+            if self._is_on_board(end_row, end_col):
+                if not piece_pinned:
+                    end_piece = self.board[end_row][end_col]
+                    if end_piece[0] != self._get_player_color():
+                        self._append_move((row, col), (end_row, end_col), moves)
+
+    def _get_bishop_moves(self, row, col, moves):
+        """helper function to get all bishop moves"""
+        piece_pinned, pin_direction = self._check_for_pinned_pieces(row, col)
+        enemy_color = self._get_enemy_color()
+        for direction in self.bishop_directions:
+            for i in range(1, 8):
+                end_row = row + direction[0] * i
+                end_col = col + direction[1] * i
+                if self._is_on_board(end_row, end_col):  # square is on board
+                    if (
+                        not piece_pinned
+                        or (pin_direction == direction)
+                        or (pin_direction == (-direction[0], -direction[1]))
+                    ):
+                        end_piece = self.board[end_row][end_col]
+                        if end_piece == "--" or end_piece[0] == enemy_color:
+                            self._append_move((row, col), (end_row, end_col), moves)
+                            if end_piece[0] == enemy_color:
+                                break  # cannot move beyond another piece
+                        else:
+                            break  # same color piece
+                else:
+                    break  # square is off board
+
+    def _get_queen_moves(self, row, col, moves):
+        """helper function to get all queen moves"""
+        self._get_rook_moves(row, col, moves)
+        self._get_bishop_moves(row, col, moves)
+
+    def _get_king_moves(self, row, col, moves):
+        """helper function to get all king moves"""
+        for row_move, col_move in self.king_moves:
+            end_row = row + row_move
+            end_col = col + col_move
+            if self._is_on_board(end_row, end_col):
+                end_piece = self.board[end_row][end_col]
+                player_color = self._get_player_color()
+                if end_piece[0] != player_color:
+                    # check if move puts king in check
+                    self._update_king_location(player_color, end_row, end_col)
+                    in_check, _, _ = self.check_for_pins_and_checks()
+                    if not in_check:
+                        self._append_move((row, col), (end_row, end_col), moves)
+
+                    # move king back to original location
+                    self._update_king_location(player_color, row, col)
 
     # ==============================================================
     # private helper methods
@@ -186,6 +376,12 @@ class GameState:
 
     def _is_king(self, direction_range, piece_type):
         return direction_range == 1 and piece_type == "K"
+
+    def _get_piece(self, row, col):
+        return self.board[row][col]
+
+    def _is_check_over(self, check_row, check_col, target_square):
+        return check_row == target_square[0] and check_col == target_square[1]
 
     def _is_in_check(self):
         if self.white_to_move:
@@ -249,111 +445,19 @@ class GameState:
         else:
             return False
 
-    # ==============================================================
-    # piece move methods
-    # ==============================================================
+    @staticmethod
+    def _calc_squares_move(row_dir, col_dir, dist):
+        return row_dir * dist, col_dir * dist
 
-    def _get_pawn_moves(self, row, col, moves):
-        """helper function to get all pawn moves"""
-        self._check_pawn_forward_move(row, col, moves)
-        self._check_pawn_left_capture(row, col, moves)
-        self._check_pawn_right_capture(row, col, moves)
-
-    def _check_pawn_forward_move(self, row, col, moves):
-        """helper function to check pawn's forward moves"""
-        row_adder = -1 if self.white_to_move else 1
-        row_direction, first_move_row_direction = row + row_adder, row + row_adder * 2
-        base_row = 6 if self.white_to_move else 1
-        if self.board[row_direction][col] == "--":  # 1 sq advance
-            moves.append(Move((row, col), (row_direction, col), self.board))
-            if (
-                row == base_row and self.board[first_move_row_direction][col] == "--"
-            ):  # 2-sq advance
-                self._append_move((row, col), (first_move_row_direction, col), moves)
-
+    @staticmethod
+    def check_if_valid_move(move, valid_squares, moves):
+        if not (move.end_row, move.end_col) in valid_squares:
+            moves.remove(move)
         return moves
 
-    def _check_pawn_left_capture(self, row, col, moves):
-        """helper function to check pawn's left diagonal moves"""
-        enemy_color = self._get_enemy_color()
-        row_direction = row + self._get_color_direction()
-        if (col - 1) >= 0:  # safety check
-            if self.board[row_direction][col - 1][0] == enemy_color:
-                self._append_move((row, col), (row_direction, col - 1), moves)
-
-        return moves
-
-    def _check_pawn_right_capture(self, row, col, moves):
-        """helper function to check pawn's right diagonal moves"""
-        enemy_color = self._get_enemy_color()
-        row_direction = row + self._get_color_direction()
-        if (col + 1) <= 7:  # safety check
-            if self.board[row_direction][col + 1][0] == enemy_color:
-                self._append_move((row, col), (row_direction, col + 1), moves)
-
-        return moves
-
-    def _get_rook_moves(self, row, col, moves):
-        """helper function to get all rook moves"""
-        enemy_color = self._get_enemy_color()
-        for direction in self.rook_directions:
-            # for direction in directions:
-            for i in range(1, 8):
-                end_row = row + direction[0] * i
-                end_col = col + direction[1] * i
-                if self._is_on_board(end_row, end_col):  # square is on board
-                    end_piece = self.board[end_row][end_col]
-                    if end_piece == "--" or end_piece[0] == enemy_color:
-                        self._append_move((row, col), (end_row, end_col), moves)
-                        if end_piece[0] == enemy_color:
-                            break  # cannot move beyond another piece
-                    else:
-                        break  # same color piece
-                else:
-                    break  # square is off board
-
-    def _get_knight_moves(self, row, col, moves):
-        """helper function to get all knight moves"""
-        for move in self.knight_moves:
-            end_row = row + move[0]
-            end_col = col + move[1]
-            if self._is_on_board(end_row, end_col):
-                end_piece = self.board[end_row][end_col]
-                if end_piece[0] != self._get_player_color():
-                    self._append_move((row, col), (end_row, end_col), moves)
-
-    def _get_bishop_moves(self, row, col, moves):
-        """helper function to get all bishop moves"""
-        enemy_color = self._get_enemy_color()
-        for direction in self.bishop_directions:
-            for i in range(1, 8):
-                end_row = row + direction[0] * i
-                end_col = col + direction[1] * i
-                if self._is_on_board(end_row, end_col):  # square is on board
-                    end_piece = self.board[end_row][end_col]
-                    if end_piece == "--" or end_piece[0] == enemy_color:
-                        self._append_move((row, col), (end_row, end_col), moves)
-                        if end_piece[0] == enemy_color:
-                            break  # cannot move beyond another piece
-                    else:
-                        break  # same color piece
-                else:
-                    break  # square is off board
-
-    def _get_queen_moves(self, row, col, moves):
-        """helper function to get all queen moves"""
-        self._get_rook_moves(row, col, moves)
-        self._get_bishop_moves(row, col, moves)
-
-    def _get_king_moves(self, row, col, moves):
-        """helper function to get all king moves"""
-        for row_move, col_move in self.king_moves:
-            end_row = row + row_move
-            end_col = col + col_move
-            if self._is_on_board(end_row, end_col):
-                end_piece = self.board[end_row][end_col]
-                if end_piece[0] != self._get_player_color():
-                    self._append_move((row, col), (end_row, end_col), moves)
+    @staticmethod
+    def _is_piece_pin(row, col, pin):
+        return pin[0] == row and pin[1] == col
 
 
 class Move:
