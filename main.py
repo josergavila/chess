@@ -57,7 +57,7 @@ def main():
     screen.fill(pg.Color("white"))
 
     game_state = chess_engine.GameState()
-    validMoves = game_state.get_valid_moves()
+    valid_moves = game_state.get_valid_moves()
     move_made = False
     load_images()
 
@@ -84,13 +84,16 @@ def main():
                     move = chess_engine.Move(
                         player_clicks[0], player_clicks[1], game_state.board
                     )
-                    if move in validMoves:
-                        game_state.make_move(move)
-                        move_made = True
-                        square_selected = ()
-                        player_clicks = []
-                    else:
-                        player_clicks = [square_selected]
+                    for valid_move in valid_moves:
+                        if move == valid_move:
+                            # for move in valid_moves:
+                            game_state.make_move(valid_move)
+                            move_made = True
+                            square_selected = ()
+                            player_clicks = []
+
+                        if not move_made:
+                            player_clicks = [square_selected]
 
             elif event.type == pg.KEYDOWN:
                 if event.key == pg.K_z:  # undo move
@@ -98,7 +101,7 @@ def main():
                     move_made = True
 
         if move_made:
-            validMoves = game_state.get_valid_moves()
+            valid_moves = game_state.get_valid_moves()
             move_made = False
 
         draw_game_state(screen, game_state)

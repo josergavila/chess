@@ -1,5 +1,9 @@
 """Stares all information about current state of chess game. Determines valid moves of current state and keeps move log."""
 
+# TO DO: IMPROVE CODE STYLE - REMOVE DUPLICATIONS, CREATE ABSTRATCTIONS, ETC
+# TO DO: IMPROVE CODE STYLE - REMOVE DUPLICATIONS, CREATE ABSTRATCTIONS, ETC
+# TO DO: IMPROVE CODE STYLE - REMOVE DUPLICATIONS, CREATE ABSTRATCTIONS, ETC
+
 
 class GameState:
 
@@ -48,6 +52,10 @@ class GameState:
         # valid moves attributes
         self.white_king_location = (7, 4)
         self.black_king_location = (0, 4)
+
+        self.in_check = False
+        self.pins = []
+        self.checks = []
         self.check_mate = False
         self.stale_mate = False
 
@@ -59,6 +67,9 @@ class GameState:
         self.white_to_move = not self.white_to_move
         if "K" in move.piece_moved:  # update king location
             self._update_king_location(move.piece_moved[0], move.end_row, move.end_col)
+
+        if move.is_pawn_promotion:
+            self.board[move.end_row][move.end_col] = move.piece_moved[0] + "Q"
 
     def undo_move(self):
         """undo last move"""
@@ -80,37 +91,46 @@ class GameState:
 
         if self.in_check:
             if len(self.checks) == 1:  # one check -> block it or move king
-                self.get_valid_moves_for_one_check(king_row, king_col, moves)
+                moves = self.get_valid_moves_for_one_check(king_row, king_col, moves)
             else:  # double check -> king has to move
-                self._get_king_moves(king_row, king_col, moves)
-        else:
+                moves = self._get_king_moves(king_row, king_col, moves)
+        else:  # not check -> all moves should be valid
             moves = self.get_all_possible_moves()
 
         return moves
 
     def get_valid_moves_for_one_check(self, king_row, king_col, moves):
-        if len(self.checks) == 1:  # one check -> block it or move king
-            moves = self.get_all_possible_moves()
-            check_row, check_col, check_row_dir, check_col_dir = self.checks[0]
-            piece_checking = self._get_piece(check_row, check_col)
-            valid_squares = []
-            if piece_checking == "N":
-                valid_squares = [(check_row, check_col)]
-            else:
-                for i in range(1, 8):
-                    row_move, col_move = self._calc_squares_move(
-                        check_row_dir, check_col_dir, i
-                    )
-                    valid_square = (king_row + row_move, king_col + col_move)
-                    valid_squares.append(valid_square)
-                    if self._is_check_over(check_row, check_col, valid_square):
-                        break  # reached piece -> check if over
-            self.validate_possible_moves(valid_squares, moves)
+        moves = self.get_all_possible_moves()
+        check_row, check_col, check_row_dir, check_col_dir = self.checks[0]
+        piece_checking = self._get_piece(check_row, check_col)
+        valid_squares = []
+        if piece_checking == "N":
+            valid_squares = [(check_row, check_col)]
+        else:
+            for i in range(1, 8):  # any square towards checking piece is valid
+                row_move, col_move = self._calc_squares_move(
+                    check_row_dir, check_col_dir, i
+                )
+                valid_square = (king_row + row_move, king_col + col_move)
+                valid_squares.append(valid_square)
+                if self._is_check_over(check_row, check_col, valid_square):
+                    break  # reached piece -> check is over
+
+        for move in reversed(moves):
+            if move.piece_moved[1] == "K":
+                continue
+
+            # if it's not king must block or capture
+            if not (move.end_row, move.end_col) in valid_squares:
+                moves.remove(move)
+
+        return self.validate_possible_moves(valid_squares, moves)
 
     def validate_possible_moves(self, valid_squares, moves):
         for move in reversed(moves):
             if move.piece_moved != "K":  # not king -> must block or capture
-                self.check_if_valid_move(move, valid_squares, moves)
+                moves = self.check_if_valid_move(move, valid_squares, moves)
+        return moves
 
     def get_valid_moves_naive(self):
         """all moves considering checks/rules"""
@@ -151,7 +171,7 @@ class GameState:
                     if not possible_pin:  # pin - piece protecting king
                         possible_pin = (end_row, end_col, row_dir, col_dir)
                     else:
-                        break  # two pieces in direction - no pin
+                        break  # two pieces in direction -> no pin
                 elif end_piece[0] == enemy_color:
                     piece_type = end_piece[1]
                     if (
@@ -159,8 +179,9 @@ class GameState:
                         or self._is_bishop(direction, piece_type)
                         or (
                             self._is_pawn(i, piece_type)
-                            and self._is_there_pawn_threat(enemy_color, direction)
+                            and self._is_pawn_a_threat(enemy_color, direction)
                         )
+                        or self._is_queen(piece_type)
                         or self._is_king(i, piece_type)
                     ):
                         if not possible_pin:
@@ -173,16 +194,16 @@ class GameState:
                     else:  # no possible checks
                         break
 
-        for row_dir, col_dir in self.knight_moves:  # check for knights
-            end_row = start_row + row_dir
-            end_col = start_col + col_dir
+        for row_move, col_move in self.knight_moves:  # check for knights
+            end_row = start_row + row_move
+            end_col = start_col + col_move
             if not self._is_on_board(end_row, end_col):  # off board
                 break
 
             end_piece = self.board[end_row][end_col]
             if end_piece[0] == enemy_color and end_piece[1] == "N":
                 in_check = True
-                checks.append((end_row, end_col, row_dir, col_dir))
+                checks.append((end_row, end_col, row_move, col_move))
 
         return in_check, pins, checks
 
@@ -246,7 +267,6 @@ class GameState:
         if (col - 1) >= 0:  # safety check
             if self.board[row_direction][col - 1][0] == enemy_color:
                 if not piece_pinned or (pin_direction == (row_direction, -1)):
-                    breakpoint()
                     self._append_move((row, col), (row_direction, col - 1), moves)
 
         return moves
@@ -330,21 +350,23 @@ class GameState:
 
     def _get_king_moves(self, row, col, moves):
         """helper function to get all king moves"""
+        player_color = self._get_player_color()
         for row_move, col_move in self.king_moves:
             end_row = row + row_move
             end_col = col + col_move
-            if self._is_on_board(end_row, end_col):
-                end_piece = self.board[end_row][end_col]
-                player_color = self._get_player_color()
-                if end_piece[0] != player_color:
-                    # check if move puts king in check
-                    self._update_king_location(player_color, end_row, end_col)
-                    in_check, _, _ = self.check_for_pins_and_checks()
-                    if not in_check:
-                        self._append_move((row, col), (end_row, end_col), moves)
+            if not self._is_on_board(end_row, end_col):
+                continue
 
-                    # move king back to original location
-                    self._update_king_location(player_color, row, col)
+            end_piece = self.board[end_row][end_col]
+            if end_piece[0] != player_color:
+                # check if move puts king in check
+                self._update_king_location(player_color, end_row, end_col)
+                in_check, _, _ = self.check_for_pins_and_checks()
+                if not in_check:
+                    moves = self._append_move((row, col), (end_row, end_col), moves)
+
+                # move king back to original location
+                self._update_king_location(player_color, row, col)
 
     # ==============================================================
     # private helper methods
@@ -368,11 +390,11 @@ class GameState:
     def _is_bishop(self, direction, piece_type):
         return direction in self.bishop_directions and piece_type == "B"
 
-    def _is_queen(self, piece_type):
-        return piece_type == "Q"
-
     def _is_pawn(self, direction_range, piece_type):
         return direction_range == 1 and piece_type == "p"
+
+    def _is_queen(self, piece_type):
+        return piece_type == "Q"
 
     def _is_king(self, direction_range, piece_type):
         return direction_range == 1 and piece_type == "K"
@@ -424,6 +446,7 @@ class GameState:
 
     def _append_move(self, start_square, end_square, moves):
         moves.append(self._instantiate_move(start_square, end_square))
+        return moves
 
     def _instantiate_move(self, start_square, end_square):
         return Move(start_square, end_square, self.board)
@@ -437,7 +460,7 @@ class GameState:
         return (0 <= row < 8) and (0 <= col < 8)
 
     @staticmethod
-    def _is_there_pawn_threat(piece_color, piece_direction):
+    def _is_pawn_a_threat(piece_color, piece_direction):
         if piece_color == "w" and piece_direction in ((1, -1), (1, 1)):
             return True
         elif piece_color == "b" and piece_direction in ((-1, -1), (-1, 1)):
@@ -447,7 +470,7 @@ class GameState:
 
     @staticmethod
     def _calc_squares_move(row_dir, col_dir, dist):
-        return row_dir * dist, col_dir * dist
+        return (row_dir * dist, col_dir * dist)
 
     @staticmethod
     def check_if_valid_move(move, valid_squares, moves):
@@ -472,6 +495,7 @@ class Move:
         self.end_row, self.end_col = end_square
         self.piece_moved = board[self.start_row][self.start_col]
         self.piece_captured = board[self.end_row][self.end_col]
+        self.set_pawn_promotion()
         self.move_id = (
             self.start_row * 1000
             + self.start_col * 100
@@ -490,6 +514,14 @@ class Move:
         return False
 
     # ==============================================================
+
+    def set_pawn_promotion(self):
+        if self.piece_moved == "wp" and self.end_row == 0:
+            self.is_pawn_promotion = True
+        elif self.piece_moved == "bp" and self.end_row == 7:
+            self.is_pawn_promotion = True
+        else:
+            self.is_pawn_promotion = False
 
     def get_chess_notation(self):
         return self._get_rank_file(self.start_row, self.start_col) + self._get_rank_file(
