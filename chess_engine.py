@@ -1,8 +1,6 @@
 """Stares all information about current state of chess game. Determines valid moves of current state and keeps move log."""
 
-# TO DO: IMPROVE CODE STYLE - REMOVE DUPLICATIONS, CREATE ABSTRATCTIONS, ETC
-# TO DO: IMPROVE CODE STYLE - REMOVE DUPLICATIONS, CREATE ABSTRATCTIONS, ETC
-# TO DO: IMPROVE CODE STYLE - REMOVE DUPLICATIONS, CREATE ABSTRATCTIONS, ETC
+# TODO: IMPROVE CODE STYLE - REMOVE DUPLICATIONS, CREATE ABSTRATCTIONS, ETC
 
 
 class GameState:
@@ -48,6 +46,7 @@ class GameState:
         }
         self.white_to_move = True
         self.move_log = []
+        self.en_passant_possible_move = ()
 
         # valid moves attributes
         self.white_king_location = (7, 4)
@@ -69,7 +68,15 @@ class GameState:
             self._update_king_location(move.piece_moved[0], move.end_row, move.end_col)
 
         if move.is_pawn_promotion:
-            self.board[move.end_row][move.end_col] = move.piece_moved[0] + "Q"
+            self.board[move.end_row][move.end_col] = f"{move.piece_moved[0]}Q"
+
+        if move.is_en_passant:
+            self.board[move.start_row][move.end_col] = "--"
+
+        self.en_passant_possible_move = ()
+        if self._is_two_square_pawn_advance(move):
+            en_passant_row = (move.start_row + move.end_row) // 2
+            self.en_passant_possible_move = (en_passant_row, move.end_col)
 
     def undo_move(self):
         """undo last move"""
@@ -83,6 +90,15 @@ class GameState:
             self._update_king_location(
                 move.piece_moved[0], move.start_row, move.start_col
             )
+
+        if move.is_en_passant:
+            self.board[move.end_row][move.end_col] = "--"
+            self.board[move.start_row][move.start_col] = move.piece_moved
+            self.board[move.start_row][move.end_col] = move.piece_captured
+            self.en_passant_possible_move = (move.end_row, move.end_col)
+
+        if self._is_two_square_pawn_advance(move):
+            self.en_passant_possible = ()
 
     def get_valid_moves(self):
         moves = []
@@ -229,20 +245,6 @@ class GameState:
         self._check_pawn_left_capture(row, col, moves, pin_info)
         self._check_pawn_right_capture(row, col, moves, pin_info)
 
-    def _check_for_pinned_pieces(self, row, col, rook=False):
-        piece_pinned, pin_direction = False, ()
-        for pin in reversed(self.pins):
-            if self._is_piece_pin(row, col, pin):
-                piece_pinned = True
-                pin_direction = (pin[2], pin[3])
-                self.pins.remove(pin)
-                if rook and self.board[row][col][1] != "Q":
-                    # can't remove queen pin from, only bishop moves
-                    self.pins.remove(pin)
-                break
-
-        return piece_pinned, pin_direction
-
     def _check_pawn_forward_move(self, row, col, moves, pin_info):
         """helper function to check pawn's forward moves"""
         piece_pinned, pin_direction = pin_info
@@ -268,6 +270,8 @@ class GameState:
             if self.board[row_direction][col - 1][0] == enemy_color:
                 if not piece_pinned or (pin_direction == (row_direction, -1)):
                     self._append_move((row, col), (row_direction, col - 1), moves)
+            elif (row - 1, col - 1) == self.en_passant_possible_move:
+                self._append_move((row, col), (row_direction, col - 1), moves, True)
 
         return moves
 
@@ -280,6 +284,8 @@ class GameState:
             if self.board[row_direction][col + 1][0] == enemy_color:
                 if not piece_pinned or (pin_direction == (row_direction, 1)):
                     self._append_move((row, col), (row_direction, col + 1), moves)
+            elif (row - 1, col + 1) == self.en_passant_possible_move:
+                self._append_move((row, col), (row_direction, col + 1), moves, True)
 
         return moves
 
@@ -444,16 +450,34 @@ class GameState:
     def _get_color_direction(self):
         return -1 if self.white_to_move else 1
 
-    def _append_move(self, start_square, end_square, moves):
-        moves.append(self._instantiate_move(start_square, end_square))
+    def _append_move(self, start_square, end_square, moves, en_passant=False):
+        moves.append(self._instantiate_move(start_square, end_square, en_passant))
         return moves
 
-    def _instantiate_move(self, start_square, end_square):
-        return Move(start_square, end_square, self.board)
+    def _instantiate_move(self, start_square, end_square, en_passant=False):
+        return Move(start_square, end_square, self.board, en_passant)
+
+    def _check_for_pinned_pieces(self, row, col, rook=False):
+        piece_pinned, pin_direction = False, ()
+        for pin in reversed(self.pins):
+            if self._is_piece_pin(row, col, pin):
+                piece_pinned = True
+                pin_direction = (pin[2], pin[3])
+                self.pins.remove(pin)
+                if rook and self.board[row][col][1] != "Q":
+                    # can't remove queen pin from, only bishop moves
+                    self.pins.remove(pin)
+                break
+
+        return piece_pinned, pin_direction
 
     # ==============================================================
     # static methods
     # ==============================================================
+
+    @staticmethod
+    def _is_two_square_pawn_advance(move):
+        return move.piece_moved[1] == "p" and abs(move.start_row - move.end_row) == 2
 
     @staticmethod
     def _is_on_board(row, col):
@@ -490,18 +514,21 @@ class Move:
     files_to_cols = {"a": 0, "b": 1, "c": 2, "d": 3, "e": 4, "f": 5, "g": 6, "h": 7}
     cols_to_files = {v: k for k, v in files_to_cols.items()}
 
-    def __init__(self, start_square, end_square, board):
+    def __init__(self, start_square, end_square, board, is_en_passant=False):
         self.start_row, self.start_col = start_square
         self.end_row, self.end_col = end_square
         self.piece_moved = board[self.start_row][self.start_col]
         self.piece_captured = board[self.end_row][self.end_col]
-        self.set_pawn_promotion()
         self.move_id = (
             self.start_row * 1000
             + self.start_col * 100
             + self.end_row * 10
             + self.end_col
         )
+        self.is_pawn_promotion = self.set_pawn_promotion()
+        self.is_en_passant = is_en_passant
+        if self.is_en_passant:
+            self.piece_captured = "wp" if self.piece_moved == "bp" else "bp"
 
     # ==============================================================
     # magic methods
@@ -516,12 +543,7 @@ class Move:
     # ==============================================================
 
     def set_pawn_promotion(self):
-        if self.piece_moved == "wp" and self.end_row == 0:
-            self.is_pawn_promotion = True
-        elif self.piece_moved == "bp" and self.end_row == 7:
-            self.is_pawn_promotion = True
-        else:
-            self.is_pawn_promotion = False
+        return (self.piece_moved in ("wp", "bp")) and (self.end_row in (0, 7))
 
     def get_chess_notation(self):
         return self._get_rank_file(self.start_row, self.start_col) + self._get_rank_file(
