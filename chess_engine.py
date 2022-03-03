@@ -446,7 +446,6 @@ class GameState:
 
     def _make_castle_move(self, move):
         if move.end_col - move.start_col == 2:  # king side castle
-            breakpoint()
             self.board[move.end_row][move.end_col - 1] = self.board[move.end_row][
                 move.end_col + 1
             ]
