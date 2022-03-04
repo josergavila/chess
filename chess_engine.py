@@ -113,6 +113,8 @@ class GameState:
         self.current_castling_rights = self.castle_rights_log[-1]
         if move.is_castle:
             self._undo_castle_move(move)
+        self.check_mate = False
+        self.stale_mate = False
 
     def get_valid_moves(self):
         moves = []
@@ -485,18 +487,28 @@ class GameState:
             self._get_queen_side_castle_moves(row, col, moves, player_color)
 
     def _get_king_side_castle_moves(self, row, col, moves, player_color):
-        if np.array([self.board[row][col + i] == "--" for i in range(1, 3)]).all():
-            if not self._is_square_under_attack(
-                (row, col + 1)
-            ) and not self._is_square_under_attack((row, col + 2)):
-                moves = self._append_move((row, col), (row, col + 2), moves, castle=True)
+        try:
+            if np.array([self.board[row][col + i] == "--" for i in range(1, 3)]).all():
+                if not self._is_square_under_attack(
+                    (row, col + 1)
+                ) and not self._is_square_under_attack((row, col + 2)):
+                    moves = self._append_move(
+                        (row, col), (row, col + 2), moves, castle=True
+                    )
+        except IndexError:
+            return
 
     def _get_queen_side_castle_moves(self, row, col, moves, player_color):
-        if np.array([self.board[row][col - i] == "--" for i in range(1, 4)]).all():
-            if not self._is_square_under_attack(
-                (row, col - 1)
-            ) and not self._is_square_under_attack((row, col - 2)):
-                moves = self._append_move((row, col), (row, col - 2), moves, castle=True)
+        try:
+            if np.array([self.board[row][col - i] == "--" for i in range(1, 4)]).all():
+                if not self._is_square_under_attack(
+                    (row, col - 1)
+                ) and not self._is_square_under_attack((row, col - 2)):
+                    moves = self._append_move(
+                        (row, col), (row, col - 2), moves, castle=True
+                    )
+        except IndexError:
+            return
 
     def _is_rook(self, direction, piece_type):
         return direction in self.rook_directions and piece_type == "R"

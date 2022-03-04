@@ -30,7 +30,7 @@ def main():
     square_selected = ()  # keeps track of last click
     player_clicks = []  # keeps track of players clicks
     game_over = False
-    player_one, player_two = True, False
+    player_one, player_two = False, False
     while running:
         human_turn = is_human_turn(game_state, player_one, player_two)
         for event in pg.event.get():
@@ -72,10 +72,12 @@ def main():
                     game_state = chess_engine.GameState()
                     valid_moves = game_state.get_valid_moves()
                     square_selected, player_clicks = (), []
-                    move_made, animate = False, False
+                    move_made, animate, game_over = False, False, False
 
         if not game_over and not human_turn:
-            ai_move = ai.find_random_move(valid_moves)
+            ai_move = ai.find_best_move_min_max(game_state, valid_moves)
+            if not ai_move:
+                ai_move = ai.find_random_move(valid_moves)
             game_state.make_move(ai_move)
             move_made, animate = True, True
 
