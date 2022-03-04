@@ -4,6 +4,7 @@ import os
 import pygame as pg
 
 import chess_engine
+import chess_ai as ai
 from settings import *
 
 # ======================
@@ -29,11 +30,13 @@ def main():
     square_selected = ()  # keeps track of last click
     player_clicks = []  # keeps track of players clicks
     game_over = False
+    player_one, player_two = True, False
     while running:
+        human_turn = is_human_turn(game_state, player_one, player_two)
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 running = False
-            elif event.type == pg.MOUSEBUTTONDOWN and not game_over:
+            elif event.type == pg.MOUSEBUTTONDOWN and not game_over and human_turn:
                 # (x, y) location of mouse
                 location = pg.mouse.get_pos()
                 col = location[0] // SQ_SIZE
@@ -71,6 +74,11 @@ def main():
                     square_selected, player_clicks = (), []
                     move_made, animate = False, False
 
+        if not game_over and not human_turn:
+            ai_move = ai.find_random_move(valid_moves)
+            game_state.make_move(ai_move)
+            move_made, animate = True, True
+
         if move_made:
             if animate:
                 animate_move(game_state.move_log[-1], screen, game_state.board, clock)
@@ -98,6 +106,12 @@ def load_images():
         IMAGES[piece] = pg.transform.scale(
             pg.image.load(f"images/{piece}.png"), (SQ_SIZE, SQ_SIZE)
         )
+
+
+def is_human_turn(game_state, player_one, player_two):
+    return (game_state.white_to_move and player_one) or (
+        not game_state.white_to_move and player_two
+    )
 
 
 def draw_game_state(screen, game_state, valid_moves, square_selected):
