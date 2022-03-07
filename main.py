@@ -30,7 +30,7 @@ def main():
     square_selected = ()  # keeps track of last click
     player_clicks = []  # keeps track of players clicks
     game_over = False
-    player_one, player_two = True, False
+    player_one, player_two = True, True
     while running:
         human_turn = is_human_turn(game_state, player_one, player_two)
         for event in pg.event.get():
@@ -184,6 +184,12 @@ def animate_move(move, screen, board, clock):
         )
         pg.draw.rect(screen, color, end_square)
         if move.piece_captured != "--":
+            if move.is_en_passant:
+                row_adder = +1 if move.piece_captured[0] == "b" else -1
+                en_passant_row = move.end_row + row_adder
+                end_square = pg.Rect(
+                    move.end_col * SQ_SIZE, en_passant_row * SQ_SIZE, SQ_SIZE, SQ_SIZE
+                )
             screen.blit(IMAGES[move.piece_captured], end_square)
         screen.blit(
             IMAGES[move.piece_moved],

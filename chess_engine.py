@@ -49,6 +49,7 @@ class GameState:
         self.white_to_move = True
         self.move_log = []
         self.en_passant_possible_move = ()
+        self.en_passant_possible_log = [self.en_passant_possible_move]
         self.current_castling_rights = CastleRights()
         self.castle_rights_log = self._update_castle_rights_log()
 
@@ -82,6 +83,8 @@ class GameState:
             en_passant_row = (move.start_row + move.end_row) // 2
             self.en_passant_possible_move = (en_passant_row, move.end_col)
 
+        self.en_passant_possible_log.append(self.en_passant_possible_move)
+
         if move.is_castle:
             self._make_castle_move(move)
         self._update_castle_rights(move)
@@ -101,18 +104,15 @@ class GameState:
 
         if move.is_en_passant:
             self.board[move.end_row][move.end_col] = "--"
-            self.board[move.start_row][move.start_col] = move.piece_moved
             self.board[move.start_row][move.end_col] = move.piece_captured
-            self.en_passant_possible_move = (move.end_row, move.end_col)
+        self.en_passant_possible_log.pop()
+        self.en_passant_possible_move = self.en_passant_possible_log[-1]
 
-        if self._is_two_square_pawn_advance(move):
-            self.en_passant_possible = ()
-
-        # buggy - needs to check if is castling move
         self.castle_rights_log.pop()
         self.current_castling_rights = self.castle_rights_log[-1]
         if move.is_castle:
             self._undo_castle_move(move)
+
         self.check_mate = False
         self.stale_mate = False
 
@@ -426,6 +426,20 @@ class GameState:
                 if not move.start_col:
                     self.current_castling_rights.black_queen_side = False
                 elif move.start_col == 7:  # right rook
+                    self.current_castling_rights.black_king_side = False
+
+        # if rook is captured
+        if move.piece_captured == "wR":
+            if move.end_row == 7:
+                if not move.end_col:
+                    self.current_castling_rights.white_queen_side = False
+                elif move.end_col == 7:
+                    self.current_castling_rights.white_king_side = False
+        elif move.piece_captured == "bR":
+            if not move.end_row:
+                if not move.end_col:
+                    self.current_castling_rights.black_queen_side = False
+                elif move.end_col == 7:
                     self.current_castling_rights.black_king_side = False
 
         self.castle_rights_log.append(*self._update_castle_rights_log())
