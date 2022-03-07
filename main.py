@@ -17,9 +17,10 @@ COLORS = [pg.Color("white"), pg.Color("gray")]
 def main():
     """main driver --> Handles user input and update graphics"""
     pg.init()
-    screen = pg.display.set_mode((WIDTH, HEIGHT))
+    screen = pg.display.set_mode((BOARD_WIDTH + MOVE_LOG_PANEL_WIDTH, BOARD_HEIGHT))
     clock = pg.time.Clock()
     screen.fill(pg.Color("white"))
+    move_log_font = pg.font.SysFont("Arial", 14, False, False)
 
     game_state = chess_engine.GameState()
     valid_moves = game_state.get_valid_moves()
@@ -30,7 +31,7 @@ def main():
     square_selected = ()  # keeps track of last click
     player_clicks = []  # keeps track of players clicks
     game_over = False
-    player_one, player_two = True, True
+    player_one, player_two = False, False
     while running:
         human_turn = is_human_turn(game_state, player_one, player_two)
         for event in pg.event.get():
@@ -41,7 +42,7 @@ def main():
                 location = pg.mouse.get_pos()
                 col = location[0] // SQ_SIZE
                 row = location[1] // SQ_SIZE
-                if square_selected == (row, col):
+                if square_selected == (row, col) or col >= 8:
                     # user clicked square twice
                     square_selected, player_clicks = (), []
                 else:
@@ -87,15 +88,17 @@ def main():
             valid_moves = game_state.get_valid_moves()
             move_made = False
 
-        draw_game_state(screen, game_state, valid_moves, square_selected)
+        draw_game_state(screen, game_state, valid_moves, square_selected, move_log_font)
 
-        if game_state.check_mate:
+        if game_state.check_mate or game_state.stale_mate:
             game_over = True
-            winner_color = "Black" if game_state.white_to_move else "White"
-            draw_text(screen, f"{winner_color} wins by checkmate!")
-        elif game_state.stale_mate:
-            game_over = True
-            draw_text(screen, "Stalemate!")
+            message = "stale_mate"
+            if game_state.stale_mate:
+                message = "stale_mate"
+            else:
+                winner_color = "Black" if game_state.white_to_move else "White"
+                message = f"{winner_color} wins by checkmate!"
+            draw_end_game_text(screen, message)
 
         clock.tick(MAX_FPS)
         pg.display.flip()
@@ -116,11 +119,12 @@ def is_human_turn(game_state, player_one, player_two):
     )
 
 
-def draw_game_state(screen, game_state, valid_moves, square_selected):
+def draw_game_state(screen, game_state, valid_moves, square_selected, move_log_font):
     """implements all graphics within current game state"""
     draw_board(screen)
     highlight_squares(screen, game_state, valid_moves, square_selected)
     draw_pieces(screen, game_state.board)
+    draw_move_log(screen, game_state, move_log_font)
 
 
 def highlight_squares(screen, game_state, valid_moves, square_selected):
@@ -168,6 +172,31 @@ def draw_pieces(screen, board):
                 )
 
 
+def draw_move_log(screen, game_state, font):
+    """draws move log to the screen"""
+    move_log_rect = pg.Rect(BOARD_WIDTH, 0, MOVE_LOG_PANEL_WIDTH, MOVE_LOG_PANEL_HEIGHT)
+    pg.draw.rect(screen, pg.Color("black"), move_log_rect)
+    move_log = game_state.move_log
+    move_texts = []
+    for i in range(0, len(move_log), 2):
+        move_string = f"{str(i // 2 + 1)}. {str(move_log[i])} "
+        if i + 1 < len(move_log):  # make sure black made a move
+            move_string += f"{str(move_log[i + 1])} "
+        move_texts.append(move_string)
+
+    text_y = padding = 5
+    line_spacing, moves_per_row = 2, 3
+    for i in range(0, len(move_texts), moves_per_row):
+        move_text = ""
+        for j in range(moves_per_row):
+            if i + j < len(move_texts):
+                move_text += move_texts[i + j]
+        text_object = font.render(move_text, True, pg.Color("white"))
+        text_location = move_log_rect.move(padding, text_y)
+        screen.blit(text_object, text_location)
+        text_y += text_object.get_height() + line_spacing
+
+
 def animate_move(move, screen, board, clock):
     delta_row = move.end_row - move.start_row
     delta_col = move.end_col - move.start_col
@@ -199,12 +228,12 @@ def animate_move(move, screen, board, clock):
         clock.tick(60)
 
 
-def draw_text(screen, message):
+def draw_end_game_text(screen, message):
     font = pg.font.SysFont("Helvetica", 32, True, False)
     text_object = font.render(message, 0, pg.Color("Gray"))
-    text_location = pg.Rect(0, 0, WIDTH, HEIGHT).move(
-        WIDTH // 2 - text_object.get_width() / 2,
-        HEIGHT / 2 - text_object.get_height() / 2,
+    text_location = pg.Rect(0, 0, BOARD_WIDTH, BOARD_HEIGHT).move(
+        BOARD_WIDTH // 2 - text_object.get_width() / 2,
+        BOARD_HEIGHT / 2 - text_object.get_height() / 2,
     )
     screen.blit(text_object, text_location)
     text_object = font.render(message, 0, pg.Color("Black"))

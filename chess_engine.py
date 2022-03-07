@@ -678,10 +678,11 @@ class Move:
             + self.end_col
         )
         self.is_pawn_promotion = self.set_pawn_promotion()
+        self.is_castle = is_castle or False
         self.is_en_passant = is_en_passant or False
         if self.is_en_passant:
             self.piece_captured = "wp" if self.piece_moved == "bp" else "bp"
-        self.is_castle = is_castle or False
+        self.is_capture = self.piece_captured != "--"
 
     # ==============================================================
     # magic methods
@@ -692,6 +693,24 @@ class Move:
         if isinstance(other, Move):
             return self.move_id == other.move_id
         return False
+
+    def __str__(self):
+        if self.is_castle:
+            # "0-0"  -> king side castle
+            # "0-0-0"  -> queen side castle
+            return "0-0" if self.end_col == 6 else "0-0-0"
+
+        end_square = self._get_rank_file(self.end_row, self.end_col)
+        piece_moved = self.piece_moved[1]
+        if piece_moved == "p":
+            if self.is_capture:
+                return f"{self.cols_to_files[self.start_col]}x{end_square}"
+            return end_square
+
+        move_string = piece_moved
+        if self.is_capture:
+            move_string += "x"
+        return f"{move_string}{end_square}"
 
     # ==============================================================
 
