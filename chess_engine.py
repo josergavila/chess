@@ -290,12 +290,36 @@ class GameState:
         piece_pinned, pin_direction = pin_info
         enemy_color = self._get_enemy_color()
         row_direction = row + self._get_color_direction()
+        king_row, king_col = self._get_king_location()
         if (col - 1) >= 0:  # safety check
             if self.board[row_direction][col - 1][0] == enemy_color:
                 if not piece_pinned or (pin_direction == (row_direction, -1)):
                     self._append_move((row, col), (row_direction, col - 1), moves)
             elif (row - 1, col - 1) == self.en_passant_possible_move:
-                self._append_move((row, col), (row_direction, col - 1), moves, True)
+                attacking_piece = blocking_piece = False
+                if king_row == row:
+                    if king_col < col:
+                        inside_range = range(king_col + 1, col - 1)
+                        outside_range = range(col + 1, 8)
+                    else:
+                        inside_range = range(king_col - 1, col, -1)
+                        outside_range = range(col - 2, -1, -1)
+
+                    for i in inside_range:
+                        if self.board[row][i] != "--":  # some other piece is blocking
+                            blocking_piece = True
+
+                    for i in outside_range:
+                        square = self.board[row][i]
+                        if square[0] == enemy_color and (
+                            square[1] == "R" or square[1] == "Q"
+                        ):
+                            attacking_piece = True
+                        elif square != "--":
+                            blocking_piece = True
+
+                if not attacking_piece or blocking_piece:
+                    self._append_move((row, col), (row_direction, col - 1), moves, True)
 
         return moves
 
@@ -304,12 +328,36 @@ class GameState:
         piece_pinned, pin_direction = pin_info
         enemy_color = self._get_enemy_color()
         row_direction = row + self._get_color_direction()
+        king_row, king_col = self._get_king_location()
         if (col + 1) <= 7:  # safety check
             if self.board[row_direction][col + 1][0] == enemy_color:
                 if not piece_pinned or (pin_direction == (row_direction, 1)):
                     self._append_move((row, col), (row_direction, col + 1), moves)
             elif (row - 1, col + 1) == self.en_passant_possible_move:
-                self._append_move((row, col), (row_direction, col + 1), moves, True)
+                attacking_piece = blocking_piece = False
+                if king_row == row:
+                    if king_col < col:
+                        inside_range = range(king_col + 1, col)
+                        outside_range = range(col + 2, 8)
+                    else:
+                        inside_range = range(king_col - 1, col + 1, -1)
+                        outside_range = range(col - 1, -1, -1)
+
+                    for i in inside_range:
+                        if self.board[row][i] != "--":  # some other piece is blocking
+                            blocking_piece = True
+
+                    for i in outside_range:
+                        square = self.board[row][i]
+                        if square[0] == enemy_color and (
+                            square[1] == "R" or square[1] == "Q"
+                        ):
+                            attacking_piece = True
+                        elif square != "--":
+                            blocking_piece = True
+
+                if not attacking_piece or blocking_piece:
+                    self._append_move((row, col), (row_direction, col + 1), moves, True)
 
         return moves
 
