@@ -1,5 +1,6 @@
 """Main driver file. Handles user input and displays current GameState object"""
 import os
+from multiprocessing import Process, Queue
 
 import pygame as pg
 
@@ -31,13 +32,15 @@ def main():
     square_selected = ()  # keeps track of last click
     player_clicks = []  # keeps track of players clicks
     game_over = False
-    player_one, player_two = False, False
+    player_one, player_two = True, False
+    ai_thinking, move_finder_process = False, None
+    move_undone = False
     while running:
         human_turn = is_human_turn(game_state, player_one, player_two)
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 running = False
-            elif event.type == pg.MOUSEBUTTONDOWN and not game_over and human_turn:
+            elif event.type == pg.MOUSEBUTTONDOWN and not game_over:
                 # (x, y) location of mouse
                 location = pg.mouse.get_pos()
                 col = location[0] // SQ_SIZE
@@ -49,7 +52,7 @@ def main():
                     square_selected = (row, col)
                     player_clicks.append(square_selected)
 
-                if len(player_clicks) == 2:
+                if len(player_clicks) == 2 and human_turn:
                     move = chess_engine.Move(
                         player_clicks[0], player_clicks[1], game_state.board
                     )
@@ -67,26 +70,43 @@ def main():
             elif event.type == pg.KEYDOWN:
                 if event.key == pg.K_z:  # press z -> undo move
                     game_state.undo_move()
-                    move_made, animate = True, False
+                    move_made, animate, game_over = True, False, False
+                    if ai_thinking:
+                        move_finder_process.terminate()
+                        ai_thinking = False
+                    move_undone = True
 
                 if event.key == pg.K_r:  # press r -> reset board
                     game_state = chess_engine.GameState()
                     valid_moves = game_state.get_valid_moves()
                     square_selected, player_clicks = (), []
                     move_made, animate, game_over = False, False, False
+                    move_undone = True
 
-        if not game_over and not human_turn:
-            ai_move = ai.find_best_move(game_state, valid_moves)
-            if not ai_move:
-                ai_move = ai.find_random_move(valid_moves)
-            game_state.make_move(ai_move)
-            move_made, animate = True, True
+        if not game_over and not human_turn and not move_undone:
+            if not ai_thinking:
+                ai_thinking = True
+                print("Thinking...")
+                return_queue = Queue()  # used to pass data between threads
+                move_finder_process = Process(
+                    target=ai.find_best_move, args=(game_state, valid_moves, return_queue)
+                )
+                move_finder_process.start()
+                # ai_move = ai.find_best_move(game_state, valid_moves)
+
+            if not move_finder_process.is_alive():
+                print("Done thinking...")
+                ai_move = return_queue.get()
+                if not ai_move:
+                    ai_move = ai.find_random_move(valid_moves)
+                game_state.make_move(ai_move)
+                move_made, animate, ai_thinking = True, True, False
 
         if move_made:
             if animate:
                 animate_move(game_state.move_log[-1], screen, game_state.board, clock)
             valid_moves = game_state.get_valid_moves()
-            move_made = False
+            move_made, move_undone = False, False
 
         draw_game_state(screen, game_state, valid_moves, square_selected, move_log_font)
 

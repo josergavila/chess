@@ -2,7 +2,83 @@ import random
 
 # ======================
 # GLOBAL VARIABLES
+# ======================
 PIECE_SCORES = {"K": 0, "Q": 10, "R": 5, "B": 3, "N": 3, "p": 1, "--": None}
+
+KNIGHT_SCORES = [  # is this a good scoring?
+    [1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 2, 2, 2, 2, 2, 2, 1],
+    [1, 2, 3, 3, 3, 3, 2, 1],
+    [1, 2, 3, 4, 4, 3, 2, 1],
+    [1, 2, 3, 4, 4, 3, 2, 1],
+    [1, 2, 3, 3, 3, 3, 2, 1],
+    [1, 2, 2, 2, 2, 2, 2, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1],
+]
+
+BISHOP_SCORES = [  # is this a good scoring?
+    [4, 3, 2, 1, 1, 2, 3, 4],
+    [3, 4, 3, 2, 2, 3, 4, 3],
+    [2, 3, 4, 3, 3, 4, 3, 2],
+    [1, 2, 3, 4, 4, 3, 2, 1],
+    [1, 2, 3, 4, 4, 3, 2, 1],
+    [2, 3, 4, 3, 3, 4, 3, 2],
+    [3, 4, 3, 2, 2, 3, 4, 3],
+    [4, 3, 2, 1, 1, 2, 3, 4],
+]
+
+QUEEN_SCORES = [  # is this a good scoring?
+    [1, 1, 1, 3, 1, 1, 1, 1],
+    [1, 2, 3, 3, 3, 1, 1, 1],
+    [1, 4, 3, 3, 3, 4, 2, 1],
+    [1, 2, 3, 3, 3, 2, 2, 1],
+    [1, 2, 3, 3, 3, 2, 2, 1],
+    [1, 4, 3, 3, 3, 4, 2, 1],
+    [1, 1, 2, 3, 3, 1, 1, 1],
+    [1, 1, 1, 3, 1, 1, 1, 1],
+]
+
+ROOK_SCORES = [  # is this a good scoring?
+    [4, 3, 4, 4, 4, 4, 3, 4],
+    [4, 4, 4, 4, 4, 4, 4, 4],
+    [1, 1, 2, 3, 3, 2, 1, 1],
+    [1, 2, 3, 4, 4, 3, 2, 1],
+    [1, 2, 3, 4, 4, 3, 2, 1],
+    [1, 1, 2, 2, 2, 2, 1, 1],
+    [4, 4, 4, 4, 4, 4, 4, 4],
+    [4, 3, 4, 4, 4, 4, 3, 4],
+]
+
+WHITE_PAWN_SCORES = [  # is this a good scoring?
+    [8, 8, 8, 8, 8, 8, 8, 8],
+    [8, 8, 8, 8, 8, 8, 8, 8],
+    [5, 6, 6, 7, 7, 6, 6, 5],
+    [2, 3, 3, 5, 5, 3, 3, 2],
+    [1, 2, 3, 4, 4, 3, 2, 1],
+    [1, 1, 2, 3, 3, 2, 1, 1],
+    [1, 1, 1, 0, 0, 1, 1, 1],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+]
+
+BLACK_PAWN_SCORES = [  # is this a good scoring?
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 1, 1, 0, 0, 1, 1, 1],
+    [1, 1, 2, 3, 3, 2, 1, 1],
+    [1, 2, 3, 4, 4, 3, 2, 1],
+    [2, 3, 3, 5, 5, 3, 3, 2],
+    [5, 6, 6, 7, 7, 6, 6, 5],
+    [8, 8, 8, 8, 8, 8, 8, 8],
+    [8, 8, 8, 8, 8, 8, 8, 8],
+]
+
+PIECE_POSITION_SCORES = {
+    "N": KNIGHT_SCORES,
+    "Q": QUEEN_SCORES,
+    "B": BISHOP_SCORES,
+    "R": ROOK_SCORES,
+    "bp": BLACK_PAWN_SCORES,
+    "wp": WHITE_PAWN_SCORES,
+}
 CHECKMATE = 1000
 STALEMATE = 0
 DEPTH = 3
@@ -68,7 +144,7 @@ def score_material(board):
     return score
 
 
-def find_best_move(game_state, valid_moves):
+def find_best_move(game_state, valid_moves, return_queue):
     """helper to make first recursive call"""
     global next_move
     next_move = None
@@ -78,8 +154,7 @@ def find_best_move(game_state, valid_moves):
     find_move_nega_max_alpha_beta(
         game_state, valid_moves, DEPTH, -CHECKMATE, CHECKMATE, turn_multiplier
     )
-
-    return next_move
+    return_queue.put(next_move)
 
 
 def find_move_min_max(game_state, valid_moves, depth, white_to_move):
@@ -174,15 +249,23 @@ def score_board(game_state):
         return STALEMATE
 
     score = 0
-    for row in game_state.board:
-        for square in row:
+    for row in range(len(game_state.board)):
+        for col in range(len(game_state.board[row])):
+            square = game_state.board[row][col]
             if "--" == square:
                 continue
 
-            color, piece_score = square[0], PIECE_SCORES[square[1]]
+            piece_position_score, piece_type = 0, square[1]
+            if piece_type != "K":
+                if piece_type == "p":
+                    piece_position_score = PIECE_POSITION_SCORES[square][row][col]
+                else:
+                    piece_position_score = PIECE_POSITION_SCORES[piece_type][row][col]
+
+            color, piece_score = square[0], PIECE_SCORES[piece_type]
             if color == "w":
-                score += piece_score
+                score += piece_score + piece_position_score * 0.1
             elif color == "b":
-                score -= piece_score
+                score -= piece_score + piece_position_score * 0.1
 
     return score
