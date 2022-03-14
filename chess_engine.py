@@ -167,9 +167,11 @@ class GameState:
         return self.validate_possible_moves(valid_squares, moves)
 
     def validate_possible_moves(self, valid_squares, moves):
+        king_moves = [m for m in moves if m.piece_moved[1] == "K"]
         for move in reversed(moves):
             if move.piece_moved != "K":  # not king -> must block or capture
                 moves = self.check_if_valid_move(move, valid_squares, moves)
+        moves = [*moves, *king_moves]
         return moves
 
     def get_valid_moves_naive(self):

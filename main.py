@@ -32,7 +32,7 @@ def main():
     square_selected = ()  # keeps track of last click
     player_clicks = []  # keeps track of players clicks
     game_over = False
-    player_one, player_two = True, False
+    player_one, player_two = True, True
     ai_thinking, move_finder_process = False, None
     move_undone = False
     while running:
